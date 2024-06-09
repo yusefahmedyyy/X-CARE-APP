@@ -91,7 +91,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Profile'),backgroundColor:  Color(0xFF1AB1DD),
+        title: Text('Profile', style: TextStyle(
+              fontSize: 24,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),),backgroundColor:  Color(0xFF1AB1DD),
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import 'package:xcare/login/login.dart';
@@ -16,8 +18,10 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _textEditingController = TextEditingController();
   final List<Map<String, dynamic>> _messages = [];
+  final ScrollController _scrollController = ScrollController();
   late WebSocketChannel channel;
   bool _isLoading = false;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -37,56 +41,104 @@ class _ChatPageState extends State<ChatPage> {
           setState(() {
             _isLoading = false;
             _messages.add({'message': decodedMessage['bot_message'], 'sentByUser': false});
+            _scrollToBottom();
           });
         },
         onError: (error) {
           print('WebSocket error: $error');
-          setState(() {
-            _isLoading = false; // Update loading state if needed
-          });
         },
         onDone: () {
           print('WebSocket closed');
-          // You might want to reconnect here depending on your app logic
         },
+        cancelOnError: true,
       );
     } catch (e) {
       print('WebSocket connection error: $e');
-      setState(() {
-        _isLoading = false; // Update loading state if needed
-      });
     }
   }
 
   @override
   void dispose() {
     channel.sink.close(status.goingAway);
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _sendMessage(String message) {
-    final data = {
-      'session': '1122',
-      'profile_id': 1,
-      'message': message,
-      'filename': null,
-      'imageData': null,
-    };
+    if (channel.closeCode == null) {
+      final data = {
+        'session': '1122',
+        'profile_id': 1,
+        'message': message,
+        'filename': null,
+        'imageData': null,
+      };
 
-    setState(() {
-      _messages.add({'message': message, 'sentByUser': true});
-      _isLoading = true;
+      setState(() {
+        _messages.add({'message': message, 'sentByUser': true});
+        _isLoading = true;
+        _scrollToBottom();
+      });
+
+      channel.sink.add(jsonEncode(data));
+      _textEditingController.clear();
+    } else {
+      print('Cannot send message, WebSocket is closed.');
+    }
+  }
+
+  void _sendImage(File image) {
+    if (channel.closeCode == null) {
+      final bytes = image.readAsBytesSync();
+      final base64Image = base64Encode(bytes);
+      final data = {
+        'session': '1122',
+        'profile_id': 1,
+        'message': null,
+        'filename': image.path.split('/').last,
+        'imageData': base64Image,
+      };
+
+      setState(() {
+        _messages.add({'message': 'Image: ${image.path.split('/').last}', 'sentByUser': true});
+        _isLoading = true;
+        _scrollToBottom();
+      });
+
+      channel.sink.add(jsonEncode(data));
+    } else {
+      print('Cannot send image, WebSocket is closed.');
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
+  }
 
-    channel.sink.add(jsonEncode(data));
-    _textEditingController.clear();
+  Future<void> _pickImage() async {
+    try {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        _sendImage(File(pickedFile.path));
+      }
+    } catch (e) {
+      print('Image picking error: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat Bot'),
+        title: const Text('Chat Bot',style: TextStyle(color: Colors.white,),),
         backgroundColor: const Color(0xFF1AB1DD),
       ),
       body: Stack(
@@ -107,6 +159,7 @@ class _ChatPageState extends State<ChatPage> {
             children: [
               Expanded(
                 child: ListView.builder(
+                  controller: _scrollController,
                   itemCount: _messages.length,
                   itemBuilder: (BuildContext context, int index) {
                     final message = _messages[index];
@@ -150,6 +203,10 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                   child: Row(
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.image, color: Colors.white),
+                        onPressed: _pickImage,
+                      ),
                       Expanded(
                         child: TextField(
                           decoration: const InputDecoration(
