@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import 'package:xcare/login/login.dart';
@@ -112,7 +113,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance!.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -121,6 +122,19 @@ class _ChatPageState extends State<ChatPage> {
         );
       }
     });
+  }
+
+  Future<void> _requestPermission(BuildContext context) async {
+    if (await Permission.storage.request().isGranted) {
+      _pickImage();
+    } else {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return PermissionExplanationDialog();
+        },
+      );
+    }
   }
 
   Future<void> _pickImage() async {
@@ -138,7 +152,10 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat Bot',style: TextStyle(color: Colors.white,),),
+        title: const Text(
+          'Chat Bot',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: const Color(0xFF1AB1DD),
       ),
       body: Stack(
@@ -205,7 +222,14 @@ class _ChatPageState extends State<ChatPage> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.image, color: Colors.white),
-                        onPressed: _pickImage,
+                        onPressed: () async {
+                          final status = await Permission.storage.status;
+                          if (status.isGranted) {
+                            _pickImage();
+                          } else {
+                            _requestPermission(context);
+                          }
+                        },
                       ),
                       Expanded(
                         child: TextField(
@@ -227,7 +251,7 @@ class _ChatPageState extends State<ChatPage> {
                       ),
                       IconButton(
                         onPressed: () {
-                          final message = _textEditingController.text;
+                          final message  = _textEditingController.text;
                           if (message.isNotEmpty) {
                             _sendMessage(message);
                           }
@@ -243,6 +267,43 @@ class _ChatPageState extends State<ChatPage> {
         ],
       ),
     );
+  }
+}
+
+class PermissionExplanationDialog extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Permission Needed'),
+      content: Text('To pick photos, we need access to your device\'s storage. Please grant the permission.'),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(context); // Close the dialog
+            // Request permission again
+            await _requestPermission(context);
+          },
+          child: Text('OK'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _requestPermission(BuildContext context) async {
+    if (await Permission.storage.request().isGranted) {
+      _pickImage();
+    } else {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return PermissionExplanationDialog();
+        },
+      );
+    }
+  }
+
+  Future<void> _pickImage() async {
+    // Your image picker implementation
   }
 }
 
@@ -301,3 +362,4 @@ class MyApp extends StatelessWidget {
     return await storage.read(key: 'auth_token');
   }
 }
+
