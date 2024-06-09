@@ -1,9 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import 'package:xcare/login/login.dart';
@@ -19,143 +16,75 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _textEditingController = TextEditingController();
   final List<Map<String, dynamic>> _messages = [];
-  final ScrollController _scrollController = ScrollController();
   late WebSocketChannel channel;
   bool _isLoading = false;
-  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _connectWebSocket();
   }
+void _connectWebSocket() {
+  try {
+    channel = WebSocketChannel.connect(
+      Uri.parse('wss://ai-x-care.future-developers.cloud/ws/chatAI/1212/?!xx!?secureKey=team_x_care!xx!'),
+    );
 
-  void _connectWebSocket() {
-    try {
-      channel = WebSocketChannel.connect(
-        Uri.parse('wss://ai-x-care.future-developers.cloud/ws/chatAI/1212/?!xx!?secureKey=team_x_care!xx!'),
-      );
-
-      channel.stream.listen(
-        (message) {
-          final decodedMessage = jsonDecode(message);
-          setState(() {
-            _isLoading = false;
-            _messages.add({'message': decodedMessage['bot_message'], 'sentByUser': false});
-            _scrollToBottom();
-          });
-        },
-        onError: (error) {
-          print('WebSocket error: $error');
-        },
-        onDone: () {
-          print('WebSocket closed');
-        },
-        cancelOnError: true,
-      );
-    } catch (e) {
-      print('WebSocket connection error: $e');
-    }
+    channel.stream.listen(
+      (message) {
+        final decodedMessage = jsonDecode(message);
+        setState(() {
+          _isLoading = false;
+          _messages.add({'message': decodedMessage['bot_message'], 'sentByUser': false});
+        });
+      },
+      onError: (error) {
+        print('WebSocket error: $error');
+        // Handle error gracefully, maybe try to reconnect or notify the user
+      },
+      onDone: () {
+        print('WebSocket closed');
+        // Optionally, you can attempt to reconnect
+        // _connectWebSocket();
+      },
+      cancelOnError: true, // Ensure that the subscription is cancelled on error
+    );
+  } catch (e) {
+    print('WebSocket connection error: $e');
+    // Handle connection error gracefully
   }
+}
 
-  @override
-  void dispose() {
-    channel.sink.close(status.goingAway);
-    _scrollController.dispose();
-    super.dispose();
-  }
+void _sendMessage(String message) {
+  if (channel.closeCode == null) {
+    final data = {
+      'session': '1122',
+      'profile_id': 1,
+      'message': message,
+      'filename': null,
+      'imageData': null,
+    };
 
-  void _sendMessage(String message) {
-    if (channel.closeCode == null) {
-      final data = {
-        'session': '1122',
-        'profile_id': 1,
-        'message': message,
-        'filename': null,
-        'imageData': null,
-      };
-
-      setState(() {
-        _messages.add({'message': message, 'sentByUser': true});
-        _isLoading = true;
-        _scrollToBottom();
-      });
-
-      channel.sink.add(jsonEncode(data));
-      _textEditingController.clear();
-    } else {
-      print('Cannot send message, WebSocket is closed.');
-    }
-  }
-
-  void _sendImage(File image) {
-    if (channel.closeCode == null) {
-      final bytes = image.readAsBytesSync();
-      final base64Image = base64Encode(bytes);
-      final data = {
-        'session': '1122',
-        'profile_id': 1,
-        'message': null,
-        'filename': image.path.split('/').last,
-        'imageData': base64Image,
-      };
-
-      setState(() {
-        _messages.add({'message': 'Image: ${image.path.split('/').last}', 'sentByUser': true});
-        _isLoading = true;
-        _scrollToBottom();
-      });
-
-      channel.sink.add(jsonEncode(data));
-    } else {
-      print('Cannot send image, WebSocket is closed.');
-    }
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance!.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
+    setState(() {
+      _messages.add({'message': message, 'sentByUser': true});
+      _isLoading = true;
     });
-  }
 
-  Future<void> _requestPermission(BuildContext context) async {
-    if (await Permission.storage.request().isGranted) {
-      _pickImage();
-    } else {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return PermissionExplanationDialog();
-        },
-      );
-    }
+    channel.sink.add(jsonEncode(data));
+    _textEditingController.clear();
+  } else {
+    print('Cannot send message, WebSocket is closed.');
+    // Optionally, you can attempt to reconnect
+    // _connectWebSocket();
   }
+}
 
-  Future<void> _pickImage() async {
-    try {
-      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        _sendImage(File(pickedFile.path));
-      }
-    } catch (e) {
-      print('Image picking error: $e');
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Chat Bot',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('Chat Bot'),
         backgroundColor: const Color(0xFF1AB1DD),
       ),
       body: Stack(
@@ -176,7 +105,6 @@ class _ChatPageState extends State<ChatPage> {
             children: [
               Expanded(
                 child: ListView.builder(
-                  controller: _scrollController,
                   itemCount: _messages.length,
                   itemBuilder: (BuildContext context, int index) {
                     final message = _messages[index];
@@ -220,17 +148,6 @@ class _ChatPageState extends State<ChatPage> {
                   ),
                   child: Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.image, color: Colors.white),
-                        onPressed: () async {
-                          final status = await Permission.storage.status;
-                          if (status.isGranted) {
-                            _pickImage();
-                          } else {
-                            _requestPermission(context);
-                          }
-                        },
-                      ),
                       Expanded(
                         child: TextField(
                           decoration: const InputDecoration(
@@ -251,7 +168,7 @@ class _ChatPageState extends State<ChatPage> {
                       ),
                       IconButton(
                         onPressed: () {
-                          final message  = _textEditingController.text;
+                          final message = _textEditingController.text;
                           if (message.isNotEmpty) {
                             _sendMessage(message);
                           }
@@ -267,43 +184,6 @@ class _ChatPageState extends State<ChatPage> {
         ],
       ),
     );
-  }
-}
-
-class PermissionExplanationDialog extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Permission Needed'),
-      content: Text('To pick photos, we need access to your device\'s storage. Please grant the permission.'),
-      actions: <Widget>[
-        TextButton(
-          onPressed: () async {
-            Navigator.pop(context); // Close the dialog
-            // Request permission again
-            await _requestPermission(context);
-          },
-          child: Text('OK'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _requestPermission(BuildContext context) async {
-    if (await Permission.storage.request().isGranted) {
-      _pickImage();
-    } else {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return PermissionExplanationDialog();
-        },
-      );
-    }
-  }
-
-  Future<void> _pickImage() async {
-    // Your image picker implementation
   }
 }
 
@@ -362,4 +242,3 @@ class MyApp extends StatelessWidget {
     return await storage.read(key: 'auth_token');
   }
 }
-
