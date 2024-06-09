@@ -4,6 +4,9 @@
     <!-- Add the permission to read external storage -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
 
+    <!-- Add the permission for internet access -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="xcare"
         android:name="${applicationName}"
