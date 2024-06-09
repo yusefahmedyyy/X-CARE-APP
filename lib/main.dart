@@ -41,13 +41,20 @@ class _ChatPageState extends State<ChatPage> {
         },
         onError: (error) {
           print('WebSocket error: $error');
+          setState(() {
+            _isLoading = false; // Update loading state if needed
+          });
         },
         onDone: () {
           print('WebSocket closed');
+          // You might want to reconnect here depending on your app logic
         },
       );
     } catch (e) {
       print('WebSocket connection error: $e');
+      setState(() {
+        _isLoading = false; // Update loading state if needed
+      });
     }
   }
 
